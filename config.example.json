@@ -1,0 +1,17 @@
+{
+  "root": "/mnt/cache/appdata/plex-read-cache-trial",
+  "source": "/mnt/zfs/zfs/Media",
+  "mount": "/mnt/plex-read-cache",
+  "rclone": "/mnt/cache/appdata/plex-read-cache-trial/rclone-burst1",
+  "share": "PlexReadCache",
+  "runtime_include": "/run/plex-read-cache-path.conf",
+  "rc_port": 5579,
+  "read_ahead_mib": 999,
+  "read_ahead_low_water_mib": 250,
+  "max_cache_gib": 100,
+  "min_free_gib": 100,
+  "sample_seconds": 5,
+  "rclone_expected_version": "rclone v1.75.2-burst1",
+  "dashboard_bind": "127.0.0.1",
+  "dashboard_allow_network": "127.0.0.0/8"
+}

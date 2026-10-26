@@ -1,0 +1,123 @@
+--- a/vfs/vfscommon/options.go
++++ b/vfs/vfscommon/options.go
+@@ -134,6 +134,11 @@
+ 	Name:    "vfs_read_ahead",
+ 	Default: 0 * fs.Mebi,
+ 	Help:    "Extra read ahead over --buffer-size when using cache-mode full",
++	Groups:  "VFS",
++}, {
++	Name:    "vfs_read_ahead_low_water",
++	Default: fs.SizeSuffix(0),
++	Help:    "Burst refill when cached read-ahead falls below this size (0 disables; must be less than vfs-read-ahead)",
+ 	Groups:  "VFS",
+ }, {
+ 	Name:    "vfs_used_is_size",
+@@ -207,9 +212,10 @@
+ 	CachePollInterval  fs.Duration   `config:"vfs_cache_poll_interval"`
+ 	CaseInsensitive    bool          `config:"vfs_case_insensitive"`
+ 	BlockNormDupes     bool          `config:"vfs_block_norm_dupes"`
+-	WriteWait          fs.Duration   `config:"vfs_write_wait"`       // time to wait for in-sequence write
+-	ReadWait           fs.Duration   `config:"vfs_read_wait"`        // time to wait for in-sequence read
+-	WriteBack          fs.Duration   `config:"vfs_write_back"`       // time to wait before writing back dirty files
++	WriteWait          fs.Duration   `config:"vfs_write_wait"` // time to wait for in-sequence write
++	ReadWait           fs.Duration   `config:"vfs_read_wait"`  // time to wait for in-sequence read
++	WriteBack          fs.Duration   `config:"vfs_write_back"` // time to wait before writing back dirty files
++	ReadAheadLowWater  fs.SizeSuffix `config:"vfs_read_ahead_low_water"`
+ 	ReadAhead          fs.SizeSuffix `config:"vfs_read_ahead"`       // bytes to read ahead in cache mode "full"
+ 	UsedIsSize         bool          `config:"vfs_used_is_size"`     // if true, use the `rclone size` algorithm for Used size
+ 	FastFingerprint    bool          `config:"vfs_fast_fingerprint"` // if set use fast fingerprints
+--- a/vfs/vfscache/downloaders/downloaders.go
++++ b/vfs/vfscache/downloaders/downloaders.go
+@@ -284,6 +284,21 @@
+ // call with lock held
+ func (dls *Downloaders) _ensureDownloader(r ranges.Range) (err error) {
+ 	// defer log.Trace(dls.src, "r=%v", r)("err=%v", &err)
++
++	// Keep a filled SSD window quiet until its contiguous cached coverage
++	// falls below the lower threshold. Missing demanded bytes always bypass
++	// this gate, so seeks and independent readers retain normal behavior.
++	// This is per object/range; no global stop or bandwidth throttle is used.
++	if low := int64(dls.opt.ReadAheadLowWater); low != 0 {
++		if low < 0 || low >= int64(dls.opt.ReadAhead) {
++			return errors.New("vfs-read-ahead-low-water must be positive and less than vfs-read-ahead")
++		}
++		lowRange := r
++		lowRange.Size += low
++		if dls.item.FindMissing(lowRange).IsEmpty() {
++			return nil
++		}
++	}
+ 
+ 	// The window includes potentially unread data in the buffer
+ 	window := int64(fs.GetConfig(dls.ctx).BufferSize)
+--- /dev/null
++++ b/vfs/vfscache/downloaders/burst_test.go
+@@ -0,0 +1,53 @@
++package downloaders
++
++import (
++	"context"
++	"github.com/rclone/rclone/fs"
++	"github.com/rclone/rclone/fs/operations"
++	"github.com/rclone/rclone/fstest"
++	"github.com/rclone/rclone/lib/ranges"
++	"github.com/rclone/rclone/lib/readers"
++	"github.com/rclone/rclone/vfs/vfscommon"
++	"github.com/stretchr/testify/require"
++	"io"
++	"testing"
++	"time"
++)
++
++func TestBurstRefill(t *testing.T) {
++	r := fstest.NewRun(t)
++	const MiB = int64(1024 * 1024)
++	const size = 64 * MiB
++	ctx := context.Background()
++	src, err := operations.RcatSize(ctx, r.Fremote, "burst-test.bin", io.NopCloser(readers.NewPatternReader(size)), size, time.Now(), nil)
++	require.NoError(t, err)
++	item := &testItem{t: t, size: size}
++	opt := vfscommon.Opt
++	opt.ReadAhead = fs.SizeSuffix(16 * MiB)
++	opt.ReadAheadLowWater = fs.SizeSuffix(4 * MiB)
++	dls := New(ctx, item, &opt, "burst-test.bin", src)
++	defer func() { require.NoError(t, dls.Close(nil)) }()
++	require.NoError(t, dls.Download(ranges.Range{Pos: 0, Size: 1}))
++	require.Eventually(t, func() bool { return item.HasRange(ranges.Range{Pos: 0, Size: 16 * MiB}) }, 10*time.Second, 10*time.Millisecond)
++	// A cached read well above low water must not extend the target.
++	dls.mu.Lock()
++	before := dls.dls[0].maxOffset
++	dls.mu.Unlock()
++	require.NoError(t, dls.EnsureDownloader(ranges.Range{Pos: 3 * MiB, Size: 1}))
++	dls.mu.Lock()
++	after := dls.dls[0].maxOffset
++	dls.mu.Unlock()
++	require.Equal(t, before, after)
++	// A read near the cached tail refills the high window.
++	require.NoError(t, dls.EnsureDownloader(ranges.Range{Pos: 13 * MiB, Size: 1}))
++	require.Eventually(t, func() bool { return item.HasRange(ranges.Range{Pos: 13 * MiB, Size: 16 * MiB}) }, 10*time.Second, 10*time.Millisecond)
++	// Seek outside cached coverage must not wait for a refill timer.
++	require.NoError(t, dls.Download(ranges.Range{Pos: 50 * MiB, Size: 1024}))
++	require.True(t, item.HasRange(ranges.Range{Pos: 50 * MiB, Size: 1024}))
++	// Invalid lower threshold fails instead of silently starving a reader.
++	bad := opt
++	bad.ReadAheadLowWater = bad.ReadAhead
++	invalid := New(ctx, &testItem{t: t, size: size}, &bad, "burst-test.bin", src)
++	require.Error(t, invalid.EnsureDownloader(ranges.Range{Pos: 0, Size: 1}))
++	require.NoError(t, invalid.Close(nil))
++}
+--- /dev/null
++++ b/cmd/plexburst/main.go
+@@ -0,0 +1,12 @@
++package main
++
++import (
++	_ "github.com/rclone/rclone/backend/http"
++	_ "github.com/rclone/rclone/backend/local"
++	"github.com/rclone/rclone/cmd"
++	_ "github.com/rclone/rclone/cmd/mount"
++	_ "github.com/rclone/rclone/cmd/rc"
++	_ "github.com/rclone/rclone/cmd/version"
++)
++
++func main() { cmd.Main() }
