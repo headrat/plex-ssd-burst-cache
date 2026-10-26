@@ -4,6 +4,11 @@ An experimental, read-only SSD read-ahead cache for Plex media on Unraid.
 It fills ahead in a burst, then pauses source-file reads until the cached window
 needs topping up. A small dashboard shows source reads, cached data and free space.
 
+**Docker package:** [Build and configure Docker with Unraid host integration](docker/README.md).
+The container bundles its runtime and dashboard; the host helper manages the
+shared mount, Samba fallback and array lifecycle. It can be tested alongside the
+native trial using separate paths and a separate share.
+
 ```text
 HDD-backed media → patched rclone / FUSE → SSD cache → read-only SMB share → Plex
 ```

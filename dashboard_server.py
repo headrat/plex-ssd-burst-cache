@@ -11,7 +11,7 @@ import os
 p=argparse.ArgumentParser()
 p.add_argument('--root',required=True,type=Path)
 p.add_argument('--bind',default='127.0.0.1')
-p.add_argument('--allow-network',default='127.0.0.0/8',help='Explicit trusted client CIDR for LAN access')
+p.add_argument('--allow-network',action='append',help='Explicit trusted client CIDR; repeat for multiple networks')
 p.add_argument('--port',type=int,default=18779)
 args=p.parse_args()
 root=args.root.resolve(strict=True)
@@ -19,14 +19,14 @@ owner_lock=(root/'dashboard.lock').open('a+b')
 fcntl.flock(owner_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
 (root/'dashboard-owner.json').write_text(json.dumps({'pid':os.getpid(),'start':Path('/proc/self/stat').read_text().split()[21]}))
 html=(root/'dashboard.html').read_bytes()
-network=ipaddress.ip_network(args.allow_network)
+networks=[ipaddress.ip_network(n) for n in (args.allow_network or ['127.0.0.0/8'])]
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*_):
         pass
     def do_GET(self):
         address=ipaddress.ip_address(self.client_address[0])
-        if not address.is_loopback and address not in network:
+        if not address.is_loopback and not any(address in network for network in networks):
             self.send_error(403)
             return
         path=self.path.split('?',1)[0]

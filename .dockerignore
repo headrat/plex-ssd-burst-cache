@@ -1,0 +1,13 @@
+**
+!Dockerfile
+!cache_service.py
+!dashboard_server.py
+!dashboard.html
+!LICENSE
+!NOTICE.md
+!burst-engine
+!burst-engine/burst-engine.patch
+!burst-engine/rclone-COPYING
+!docker
+!docker/entrypoint.py
+!docker/healthcheck.py
