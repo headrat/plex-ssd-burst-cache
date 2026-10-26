@@ -44,3 +44,27 @@ image, seamless recovery of existing open SMB handles, other architectures,
 AppArmor-enabled hosts, Unraid 8, whole-film completion, prolonged space pressure
 or physical disk sleep. The Bash hooks and install path are supplied; boot
 acceptance still needs a maintenance window.
+
+## Dashboard cache-delivery follow-up
+
+The later 26 October dashboard update adds separate source-read and cache-share
+delivery plots. This is included when building current source; the earlier
+exported image ID above records the original package, before this dashboard
+update. Delivery uses TCP acknowledged bytes attributed to Samba processes
+serving only the dedicated cache share (plus IPC), including RAM and SMB framing.
+It is not physical SSD I/O or Plex-to-player bandwidth. Missing counters and
+connections shared with other data shares produce gaps.
+
+Six delivery-counter tests passed, covering rates, mixed shares, reconnects,
+counter resets, idle connections, multiple connections and reused host snapshots.
+An actual 64 MiB direct CIFS read through the existing Plex container measured
+67,115,640 acknowledged bytes with **zero new source bytes**. A further check
+included concurrent real Plex traffic. The native dashboard, API and rendered
+graph were verified; the cache owner was unchanged during dashboard-only reload.
+
+Updated Docker build ID:
+`sha256:fec3cddec7119fa549c7618a523531044a88cdca0ae468e15099488dfc192e05`.
+A separate 160 MiB paced SMB transfer through its isolated host integration
+produced positive delivery samples in the actual container dashboard history,
+peaking at 10.27 MiB/s with zero cache errors. The test container, share, watcher
+and export mount were cleaned up; the live native cache stayed running.

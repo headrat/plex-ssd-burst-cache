@@ -74,6 +74,17 @@ stop_watcher() {
     rm -f "$runtime/watch.pid"
   fi
 }
+delivery_snapshot() {
+  local smb tcp active=false
+  smb=$(smbstatus --json | jq '{tcons: (.tcons | with_entries(.value |= {service, server_id}))}') || return 1
+  tcp=$(ss -Htinp state established '( sport = :445 )') || return 1
+  if [[ -f $include ]] && fuse_mounted; then active=true; fi
+  (umask 077; jq -n --argjson smb "$smb" --arg tcp "$tcp" --arg share "$share" \
+    --argjson observed_at "$(date +%s.%N)" --argjson cache_active "$active" \
+    '{observed_at:$observed_at,cache_active:$cache_active,share:$share,smb:$smb,tcp:$tcp}' \
+    > "$state/host-delivery-input.json.tmp") || return 1
+  mv "$state/host-delivery-input.json.tmp" "$state/host-delivery-input.json"
+}
 case "$action" in
 share-config)
   printf '# plex-burst %s: persistent direct-source fallback\n[%s]\npath = %s\nread only = yes\nguest ok = yes\nforce user = nobody\nforce group = users\nhosts allow = %s\ninclude = %s\n' "$name" "$share" "$source" "$(jq -r .clients "$config")" "$include"
@@ -144,12 +155,17 @@ watch)
   exec 8>"$runtime/watch.lock"; flock -n 8 || exit 0
   printf '%s %s\n' "$$" "$(awk '{print $22}' /proc/$$/stat)" > "$runtime/watch.pid"
   trap 'exit 0' TERM INT
+  delivery_next=0
   while sleep 2; do
     if ! healthy; then
       exec 9>"$runtime/control.lock"; flock -n 9 || continue
       stop_resources
       echo 'Cache failed: share returned to original source; manual restart required'
       exit 1
+    fi
+    if (( $(date +%s) >= delivery_next )); then
+      delivery_snapshot || true  # Optional telemetry must never interrupt playback.
+      delivery_next=$(( $(date +%s) + 5 ))
     fi
   done
   ;;

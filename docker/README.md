@@ -5,6 +5,14 @@ image. The Bash host helper owns mount propagation, Samba fallback and Unraid
 events. It does not require Python on Unraid. Linux hosts only: Docker Desktop
 cannot propagate this FUSE mount to a Windows host.
 
+The host helper also supplies the dashboard's cache-delivery graph using Samba
+and `ss` TCP counters. Blue measures acknowledged delivery from the dedicated
+cache share to Plex, including RAM-cached data and protocol overhead. It is
+separate from original-source reads and from Plex's transfer to the player.
+Connections serving other data shares are excluded. Missing host telemetry is
+shown as unavailable; it does not stop playback. Use the matching host helper
+when updating an existing image.
+
 See [actual validation and remaining limits](VALIDATION.md).
 
 ## Build

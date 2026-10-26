@@ -2,6 +2,7 @@
 !Dockerfile
 !cache_service.py
 !dashboard_server.py
+!cache_delivery.py
 !dashboard.html
 !LICENSE
 !NOTICE.md

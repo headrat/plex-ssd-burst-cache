@@ -9,6 +9,8 @@
 !config.example.json
 !cache_service.py
 !dashboard_server.py
+!cache_delivery.py
+!tests/test_cache_delivery.py
 !dashboard.html
 !unraid_lifecycle.py
 !unraid-install.sh

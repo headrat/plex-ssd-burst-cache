@@ -11,7 +11,7 @@ FROM python:3.12-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3
 RUN apt-get update && apt-get install -y --no-install-recommends fuse3 ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /media /state /export
 COPY --from=engine /rclone-burst1 /usr/local/bin/rclone-burst1
 WORKDIR /app
-COPY cache_service.py dashboard_server.py dashboard.html /app/
+COPY cache_service.py dashboard_server.py cache_delivery.py dashboard.html /app/
 COPY docker/entrypoint.py docker/healthcheck.py /app/
 COPY LICENSE NOTICE.md burst-engine/rclone-COPYING /usr/share/doc/plex-ssd-burst-cache/
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1

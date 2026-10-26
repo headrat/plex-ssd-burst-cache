@@ -33,12 +33,18 @@ HDD-backed media → patched rclone / FUSE → SSD cache → read-only SMB share
 - Uses a **100 GiB soft cache budget** and **100 GiB free-space target**.
 - Retains unused cached data for up to 24 hours, subject to eviction pressure.
 - Provides a read-only dashboard and Unraid array start/stop hooks.
+- Shows source reads and delivery from the SSD-backed share to Plex on aligned
+  graphs with separate scales, so playback bursts remain visible beside refills.
 - Keeps the persistent SMB share pointed at original media; a temporary runtime
   include selects the cache while the supervisor is active.
 
 The buffer is a read-ahead target, not a cap on total cached data. Open files can
 exceed soft limits. Source-file read counters do not measure physical HDD sectors
 or prove that disks are asleep; the filesystem may serve data from RAM.
+The blue delivery graph measures TCP bytes acknowledged on dedicated cache-share
+connections, including RAM-cached data and SMB overhead. It measures Unraid to
+Plex; Plex-to-player buffering is a separate stage. Mixed-share connections and
+unavailable counters are shown as gaps rather than invented zeroes.
 
 ## Status and measured results
 
