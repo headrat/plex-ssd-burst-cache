@@ -17,3 +17,13 @@
 !burst-engine/burst-engine.patch
 !burst-engine/rclone-COPYING
 !tests/test_unraid_lifecycle.py
+!Dockerfile
+!.dockerignore
+!docker/
+!docker/README.md
+!docker/VALIDATION.md
+!docker/entrypoint.py
+!docker/healthcheck.py
+!docker/unraid-host.sh
+!docker/host-config.example.json
+!tests/test_container_config.py

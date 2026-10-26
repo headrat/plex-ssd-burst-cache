@@ -45,6 +45,8 @@ def run(argv, timeout=15):
 
 
 def share_path(cfg, active):
+    if cfg.get('mode') == 'container':
+        return  # Samba belongs to the host helper, never the container.
     path = Path(cfg['runtime_include'])
     wanted = '# Owned by Plex read-ahead trial\npath = ' + cfg['mount'] + '\n'
     if active:
@@ -82,7 +84,8 @@ def supervise(cfg, cfgpath):
         if os.path.ismount(mount):
             raise RuntimeError('Mount already exists without this owner')
         mount.chmod(0o000)  # Unmounted backing directory cannot masquerade as an empty library.
-        assert Path(cfg['source']).is_dir() and os.path.ismount('/mnt/cache')
+        assert Path(cfg['source']).is_dir()
+        assert os.path.ismount('/state') if cfg.get('mode') == 'container' else os.path.ismount('/mnt/cache')
         cache = root/'cache'
         cache.mkdir(exist_ok=True)
         empty = root/'empty-rclone.conf'
@@ -126,7 +129,8 @@ def supervise(cfg, cfgpath):
                 time.sleep(.1)
             else:
                 raise RuntimeError('Cache mount readiness timed out')
-            assert (mount/'Films').is_dir() and (mount/'TV').is_dir()
+            if cfg.get('mode') != 'container':
+                assert (mount/'Films').is_dir() and (mount/'TV').is_dir()
             share_path(cfg, True)
             previous_bytes = 0
             previous_time = time.time()
@@ -177,7 +181,7 @@ def supervise(cfg, cfgpath):
             # Direct-source SMB fallback exists persistently, including after an Unraid reboot.
             try:
                 share_path(cfg, False)
-                status['direct_source_fallback'] = True
+                status['direct_source_fallback'] = cfg.get('mode') != 'container'
             finally:
                 if child and child.poll() is None:
                     child.terminate()
@@ -188,7 +192,7 @@ def supervise(cfg, cfgpath):
                         child.wait(timeout=5)
                 if os.path.ismount(mount):
                     run(['fusermount3','-u',str(mount)])
-                status.update(phase='direct-source', checked_at=time.time())
+                status.update(phase='stopped' if cfg.get('mode') == 'container' else 'direct-source', checked_at=time.time())
                 atomic(root/'status.json', status)
 
 
@@ -201,9 +205,13 @@ def main():
     cfg=json.loads(cfgpath.read_text())
     root=Path(cfg['root']).resolve(strict=True)
     assert cfgpath.parent==root
-    assert cfg['source']=='/mnt/zfs/zfs/Media' and cfg['mount']=='/mnt/plex-read-cache'
-    assert cfg['runtime_include']=='/run/plex-read-cache-path.conf'
-    assert cfg['share']=='PlexReadCache'
+    if cfg.get('mode') == 'container':
+        assert str(root) == '/state' and cfg['source'] == '/media' and cfg['mount'] == '/export/media'
+        assert cfg['rclone'] == '/usr/local/bin/rclone-burst1' and cfg['rc_port'] == 5579
+    else:
+        assert cfg['source']=='/mnt/zfs/zfs/Media' and cfg['mount']=='/mnt/plex-read-cache'
+        assert cfg['runtime_include']=='/run/plex-read-cache-path.conf'
+        assert cfg['share']=='PlexReadCache'
     assert 1<=cfg['read_ahead_mib']<=16384 and 1<=cfg['max_cache_gib']<=1000
     assert 0<=cfg.get('read_ahead_low_water_mib',0)<cfg['read_ahead_mib']
     assert 1<=cfg['min_free_gib']<=1000 and 1<=cfg['sample_seconds']<=300

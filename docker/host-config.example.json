@@ -1,0 +1,16 @@
+{
+  "name": "plex-burst",
+  "image": "plex-ssd-burst-cache:local",
+  "source": "/mnt/user/Media",
+  "state": "/mnt/cache/appdata/plex-burst",
+  "export": "/mnt/cache/plex-burst-export",
+  "share": "PlexBurst",
+  "clients": "127.0.0.1 192.168.1.20",
+  "dashboard_bind": "127.0.0.1",
+  "dashboard_port": 18780,
+  "dashboard_network": "127.0.0.0/8",
+  "read_ahead_mib": 999,
+  "low_water_mib": 250,
+  "max_cache_gib": 100,
+  "min_free_gib": 100
+}

@@ -4,6 +4,24 @@ An experimental, read-only SSD read-ahead cache for Plex media on Unraid.
 It fills ahead in a burst, then pauses source-file reads until the cached window
 needs topping up. A small dashboard shows source reads, cached data and free space.
 
+**Docker package available:** [Installation and configuration](docker/README.md)
+| [Verified tests and limits](docker/VALIDATION.md)
+| [Example host configuration](docker/host-config.example.json).
+
+The image bundles the burst-cache engine, Python runtime and dashboard. A small
+Unraid host helper manages the shared mount, Samba fallback and array lifecycle.
+Build it from this repository on your Unraid/Linux Docker host, then follow the
+installation guide. Test with a separate share before pointing Plex at it.
+
+```sh
+docker build -t plex-ssd-burst-cache:local .
+```
+
+The Docker package was tested in isolation on Unraid 7.3.4, including actual SMB
+reads and fallback after a forced container stop. It currently ships as a build
+recipe; a public Docker registry image and one-click Unraid installation are
+not available. Live Plex migration and reboot testing remain outstanding.
+
 ```text
 HDD-backed media → patched rclone / FUSE → SSD cache → read-only SMB share → Plex
 ```
@@ -24,8 +42,9 @@ or prove that disks are asleep; the filesystem may serve data from RAM.
 
 ## Status and measured results
 
-**Prototype, not a turnkey Unraid plugin.** A custom `v1.75.2-burst1` engine is
-based on rclone 1.75.2. This patch is not an upstream rclone release.
+**Experimental Docker package and native Unraid adapter.** A custom
+`v1.75.2-burst1` engine is based on rclone 1.75.2. This patch is not an upstream
+rclone release.
 
 On 24 October 2026, two real Plex films advanced through measured source-byte
 quiet intervals of approximately **30 and 60 seconds**, with roughly **750 MiB**
@@ -38,12 +57,25 @@ seamless active-handle failover and hard-crash recovery remain unproved. Startup
 hooks were tested idempotently without restarting playback; an actual reboot and
 array-stop/start cycle were not exercised.
 
-## Requirements and layout
+## Docker requirements
 
-Tested deployment: Unraid 7.3.3, Linux FUSE3, Python 3.9.2, Samba and a mirrored
-SSD cache pool. The engine was built with Go 1.26.10, CGO disabled.
+The Docker route requires an Unraid/Linux host with Docker, FUSE3, Samba, Bash,
+`jq` and `flock`. The image includes Python and the patched rclone engine.
+Source, SSD state, export directory, share name and dashboard settings are
+configurable through the [host configuration](docker/host-config.example.json).
+Follow the [Docker guide](docker/README.md) for mount permissions, host hooks,
+installation, upgrades and recovery. Docker Desktop does not support the host
+mount propagation this integration needs.
 
-The current adapters deliberately enforce this deployment layout:
+The remaining setup instructions below describe the original native adapter.
+
+## Native requirements and layout
+
+Original native deployment: Unraid 7.3.3, Linux FUSE3, Python 3.9.2, Samba and a
+mirrored SSD cache pool; the native service was also observed running on 7.3.4.
+The engine was built with Go 1.26.10, CGO disabled.
+
+The native adapters deliberately enforce this deployment layout:
 
 | Purpose | Path |
 |---|---|
@@ -82,7 +114,7 @@ The retained trial binary hash is
 `ee2a852e8c8e34b14b011453d020afe41bdc100d39d95531801291152012faae`;
 build reproducibility across other toolchains is not claimed. No binaries ship here.
 
-## Integrate carefully
+## Integrate the native adapter
 
 1. Test on a separate library before redirecting Plex's media mount. Preserve
    its configuration, original media volume and recovery route.
